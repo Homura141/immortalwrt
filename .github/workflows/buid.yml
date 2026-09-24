@@ -1,0 +1,55 @@
+name: Build ImmortalWrt for Redmi AX6
+
+on:
+  workflow_dispatch: # 允许手动触发编译
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Dependencies
+        run: |
+          sudo apt update -y
+          sudo apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+          bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
+          git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
+          libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz \
+          mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools \
+          libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
+          vim wget xmlto xxd zlib1g-dev
+
+      - name: Update Feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Configure
+        run: |
+          # 复制针对 AX6 大分区的配置文件，如果仓库里有的话
+          # 如果没有，请手动在本地生成 .config 并上传到仓库根目录
+          if [ -f "configs/ax6_nss.config" ]; then
+            cp configs/ax6_nss.config .config
+          else
+            echo "未找到 AX6 配置文件，请确保仓库根目录有 .config 文件或修改此处路径"
+            exit 1
+          fi
+          make defconfig
+
+      - name: Download Packages
+        run: |
+          make download -j$(nproc)
+
+      - name: Compile Firmware
+        run: |
+          make -j$(nproc) V=s || make -j1 V=s
+
+      - name: Upload Firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImmortalWrt-AX6-Firmware
+          path: bin/targets/qualcommax/ipq807x/*.bin
